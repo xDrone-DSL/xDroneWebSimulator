@@ -4,6 +4,9 @@
       please check whether the url is correct.
     </div>
     <Simulator v-if="!error" :animation="animation" :environments="environments"/>
+    <div v-if="!error" >Rotate Camera: Click and Drag</div>
+    <div v-if="!error" >Move Camera: Press Ctrl + Click and Drag</div>
+    <div v-if="!error" >Zoom in/out: Scroll</div>
   </div>
 </template>
 
