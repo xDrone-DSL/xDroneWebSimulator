@@ -1,12 +1,17 @@
 <template>
   <div id="app">
-    <div v-if="error" id="error_msg">An error was met when parsing the commands,
-      please check whether the url is correct.
+    <div v-if="ready">
+      <div v-if="error" id="error_msg">An error was met when parsing the commands,
+        please check whether the url is correct.
+      </div>
+      <Simulator v-if="!error" :commands="commands" :config="config"/>
+      <div v-if="!error">Rotate Camera: Click and Drag</div>
+      <div v-if="!error">Move Camera: Press Ctrl + Click and Drag</div>
+      <div v-if="!error">Zoom in/out: Scroll</div>
     </div>
-    <Simulator v-if="!error" :animation="animation" :environments="environments"/>
-    <div v-if="!error" >Rotate Camera: Click and Drag</div>
-    <div v-if="!error" >Move Camera: Press Ctrl + Click and Drag</div>
-    <div v-if="!error" >Zoom in/out: Scroll</div>
+    <div v-else>
+      Loading...
+    </div>
   </div>
 </template>
 
@@ -17,22 +22,26 @@ export default {
   components: {Simulator},
   data() {
     return {
-      animation: [],
-      environments: [],
-      error: null
+      config: [],
+      commands: [],
+      error: null,
+      ready: false
     };
   },
   mounted() {
-    const compressed_str = this.$route.query.commands;
+    const compressed_str = this.$route.query.data;
     if (compressed_str) {
       const pako = require('pako');
       const compressed = Buffer(compressed_str, "base64");
       try {
-        this.animation = JSON.parse(pako.inflate(compressed, {to: "string"}));
+        const data = JSON.parse(pako.inflate(compressed, {to: "string"}));
+        this.config = data.config;
+        this.commands = data.commands;
       } catch (err) {
         this.error = err;
       }
     }
+    this.ready = true;
   }
 };
 </script>

@@ -4,32 +4,32 @@
 
 <script>
 import * as THREE from "three";
-import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { Sky } from "three/examples/jsm/objects/Sky.js";
+import {OrbitControls} from "three/examples/jsm/controls/OrbitControls.js";
+import {GLTFLoader} from "three/examples/jsm/loaders/GLTFLoader.js";
+import {Sky} from "three/examples/jsm/objects/Sky.js";
 import particleFire from "three-particle-fire";
-particleFire.install({ THREE: THREE });
+
+particleFire.install({THREE: THREE});
 
 export default {
   props: {
-    animation: { type: Array, required: true },
-    environments: { required: true }
+    commands: {type: Array, required: true},
+    config: {type: Array, required: true}
   },
   data() {
     return {
-      group: null,
+      groups: new Map(),
       renderer: null,
       scene: null,
       camera: null,
       controls: null,
-      mixer: null,
+      mixers: new Map(),
       animTime: 0,
       framesPerSecond: 30,
       axis10cm: null,
       axis1m: null,
       start: true,
-      play: true,
-      fires: []
+      play: true
     };
   },
   computed: {
@@ -44,7 +44,7 @@ export default {
     }
   },
   methods: {
-    init: function() {
+    init: function () {
       let container = document.getElementById("container");
       this.camera = new THREE.PerspectiveCamera(70, 8 / 6, 1, 1000);
 
@@ -57,8 +57,8 @@ export default {
 
       // Add Sun Helper
       const sunSphere = new THREE.Mesh(
-        new THREE.SphereBufferGeometry(20000, 16, 8),
-        new THREE.MeshBasicMaterial({ color: 0xffffff })
+          new THREE.SphereBufferGeometry(20000, 16, 8),
+          new THREE.MeshBasicMaterial({color: 0xffffff})
       );
       sunSphere.position.y = -700000;
       sunSphere.visible = false;
@@ -99,26 +99,33 @@ export default {
       this.scene.add(this.axis1m);
 
       // Renderer
-      this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      this.renderer = new THREE.WebGLRenderer({antialias: true, alpha: true});
       this.renderer.setSize(800, 600);
       container.appendChild(this.renderer.domElement);
 
       let loader = new GLTFLoader();
       // Load Drone
-      loader.load("/models/drone/scene.gltf", obj => {
-        this.group = new THREE.Group();
+      this.config.forEach((config) => {
+        const name = config.name;
+        const init_pos = config.init_pos;
+        loader.load("/models/drone/scene.gltf", obj => {
+          this.groups.set(name, new THREE.Group());
 
-        // remove bad shadow
-        obj.scene.children[0].children[0].children[0].children.pop(12);
-        obj.scene.position.y += 1.5;
-        this.group.add(obj.scene);
-        this.scene.add(this.group);
-        this.mixer = new THREE.AnimationMixer(this.group);
-        obj.animations.forEach(clip => {
-          this.mixer.clipAction(clip).play();
+          // remove bad shadow
+          obj.scene.children[0].children[0].children[0].children.pop(12);
+          obj.scene.position.y += 1.5;
+          this.groups.get(name).add(obj.scene);
+          this.groups.get(name).translateX(-init_pos[0]);//TODO: scale
+          this.groups.get(name).translateZ(init_pos[1]);//TODO: scale
+          this.groups.get(name).translateY(init_pos[2]);//TODO: scale
+          this.scene.add(this.groups.get(name));
+          this.mixers.set(name, new THREE.AnimationMixer(this.groups.get(name)));
+          obj.animations.forEach(clip => {
+            this.mixers.get(name).clipAction(clip).play();
+          });
         });
-      });
 
+      })
       // Ground
       const textureLoader = new THREE.TextureLoader();
       const groundColor = textureLoader.load("/models/grass_diffuse.png");
@@ -126,8 +133,8 @@ export default {
       groundColor.wrapS = groundColor.wrapT = THREE.RepeatWrapping;
 
       const ground = new THREE.Mesh(
-        new THREE.PlaneBufferGeometry(2000, 2000, 1, 1),
-        new THREE.MeshPhongMaterial({ map: groundColor })
+          new THREE.PlaneBufferGeometry(2000, 2000, 1, 1),
+          new THREE.MeshPhongMaterial({map: groundColor})
       );
       ground.position.y = -0.3;
       ground.rotation.x = THREE.Math.degToRad(-90);
@@ -147,21 +154,23 @@ export default {
 
       this.controls.update();
     },
-    animate: function() {
+    animate: function () {
       setTimeout(() => {
         requestAnimationFrame(this.animate);
-        this.fires.forEach(f => {
-          f.material.update(0.05);
-        });
       }, 1000 / this.framesPerSecond);
+
       //crop animation
-      if (this.play && this.mixer !== null) {
+      if (this.play && this.mixers.size == this.config.length) {
         if (this.animTime < 2.1 || this.animTime >= 3.9) {
-          this.mixer.setTime(2.1);
+          this.mixers.forEach((mixer) => {
+            mixer.setTime(2.1);
+          })
           this.animTime = 2.1;
         } else {
+          this.mixers.forEach((mixer) => {
+            mixer.update(0.05);
+          })
           this.animTime += 0.05;
-          this.mixer.update(0.05);
         }
       }
 
@@ -173,71 +182,85 @@ export default {
           this.start = false;
         }
       } else {
-        this.move();
+        this.move(this.commands);
       }
       this.controls.update();
 
       this.renderer.render(this.scene, this.camera);
     },
-    updateAndCheckFinished: function(stepSize) {
-      this.animation[0].value[0] -= stepSize;
-      if (this.animation[0].value[0] <= 0) {
-        this.animation.shift();
-        return true;
+    updateSequential: function (sequential, stepSize) {
+      sequential[0].values[0] -= stepSize;
+      if (sequential[0].values[0] <= 0) {
+        sequential.shift();
       }
-      return false;
     },
-    move: function() {
-      if (this.group.position.y < 0 || this.animation.length == 0) {
-        this.play = false;
+    move: function (sequential) {
+      if (sequential.length == 0) {
+        if (this.commands.length == 0) {
+          this.play = false;
+        }
         return;
       }
-      switch (this.animation[0].action) {
-        case "takeoff":
-          this.animation[0] = { action: "up", value: [2] };
-          break;
-        case "land":
-          this.animation[0] = {
-            action: "down",
-            value: [this.group.position.y]
-          };
-          break;
-        case "forward":
-          this.group.translateZ(this.speed);
-          if (this.updateAndCheckFinished(2 / this.framesPerSecond)) return;
-          break;
-        case "backward":
-          this.group.translateZ(-this.speed);
-          if (this.updateAndCheckFinished(2 / this.framesPerSecond)) return;
-          break;
-        case "right":
-          this.group.translateX(-this.speed);
-          if (this.updateAndCheckFinished(2 / this.framesPerSecond)) return;
-          break;
-        case "left":
-          this.group.translateX(this.speed);
-          if (this.updateAndCheckFinished(2 / this.framesPerSecond)) return;
-          break;
-        case "up":
-          this.group.translateY(this.speed);
-          if (this.updateAndCheckFinished(5 / this.framesPerSecond)) return;
-          break;
-        case "down":
-          this.group.translateY(-this.speed);
-          if (this.updateAndCheckFinished(5 / this.framesPerSecond)) return;
-          break;
-        case "rotate_right":
-          this.group.rotation.y -= this.angleSpeedRadius;
-          if (this.updateAndCheckFinished(this.angleSpeedDegree)) return;
-          break;
-        case "rotate_left":
-          this.group.rotation.y += this.angleSpeedRadius;
-          if (this.updateAndCheckFinished(this.angleSpeedDegree)) return;
-          break;
-        case "wait":
-          if (this.updateAndCheckFinished(1 / this.framesPerSecond)) return;
-          break;
+      const currCommand = sequential[0];
+      if (currCommand.type == "single") {
+        const name = currCommand.name;
+        const group = this.groups.get(name);
+        switch (currCommand.action) {
+          case "takeoff":
+            currCommand.action = "up";
+            currCommand.values = [this.config.find(c => c.name == name).takeoff_height];
+            break;
+          case "land":
+            currCommand.action = "down";
+            currCommand.values = [group.position.y / 3.2]; //TODO: what magic number is this????
+            break;
+          case "forward":
+            group.translateZ(this.speed);//todo change speed
+            this.updateSequential(sequential, 2 / this.framesPerSecond);
+            break;
+          case "backward":
+            group.translateZ(-this.speed);
+            this.updateSequential(sequential, 2 / this.framesPerSecond);
+            break;
+          case "right":
+            group.translateX(-this.speed);
+            this.updateSequential(sequential, 2 / this.framesPerSecond);
+            break;
+          case "left":
+            group.translateX(this.speed);
+            this.updateSequential(sequential, 2 / this.framesPerSecond);
+            break;
+          case "up":
+            group.translateY(this.speed);
+            this.updateSequential(sequential, 5 / this.framesPerSecond);
+            break;
+          case "down":
+            group.translateY(-this.speed);
+            this.updateSequential(sequential, 5 / this.framesPerSecond);
+            break;
+          case "rotate_right":
+            group.rotation.y -= this.angleSpeedRadius;
+            this.updateSequential(sequential, this.angleSpeedDegree);
+            break;
+          case "rotate_left":
+            group.rotation.y += this.angleSpeedRadius;
+            this.updateSequential(sequential, this.angleSpeedDegree);
+            break;
+          case "wait":
+            this.updateSequential(sequential, 1 / this.framesPerSecond);
+            break;
+        }
+
       }
+      if (currCommand.type == "parallel") {
+        currCommand.branches.forEach((branch) => {
+          this.move(branch)
+        })
+        if (currCommand.branches.every((branch) => branch.length == 0)) {
+          sequential.shift();
+        }
+      }
+
     }
   },
   mounted() {
