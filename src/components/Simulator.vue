@@ -1,5 +1,56 @@
 <template>
-  <div id="container"></div>
+  <div>
+    <div id="container"></div>
+    <v-row style="width: 800px">
+      <v-col :cols="3">
+        <v-btn class="ma-2 pa-2" @click="reloadPage">Replay</v-btn>
+      </v-col>
+      <v-col>
+        <v-row dense>
+          <v-col :cols="2">
+            <span>Speed:</span>
+          </v-col>
+          <v-col>
+            <v-radio-group class="ma-0 pa-0" v-model="playSpeed" row mandatory hide-details>
+              <v-radio label="Pause" :value="0"></v-radio>
+              <v-radio label="0.5x" :value="0.5"></v-radio>
+              <v-radio label="1x" :value="1"></v-radio>
+              <v-radio label="2x" :value="2"></v-radio>
+            </v-radio-group>
+          </v-col>
+        </v-row>
+        <v-row dense>
+          <v-col :cols="2">
+            FPS
+            <v-tooltip bottom>
+              <template v-slot:activator="{ on, attrs }">
+                <v-icon
+                    v-bind="attrs"
+                    v-on="on"
+                >
+                  mdi-help-box
+                </v-icon>
+              </template>
+              <div>A higher FPS improves the accuracy, but causes a heavier burden on you browser</div>
+            </v-tooltip>
+            :
+          </v-col>
+          <v-col>
+            <v-radio-group class="ma-0 pa-0" v-model="framesPerSecond" row mandatory hide-details>
+              <v-radio label="30fps" :value="30"></v-radio>
+              <v-radio label="60fps" :value="60"></v-radio>
+              <v-radio label="90fps" :value="90"></v-radio>
+            </v-radio-group>
+          </v-col>
+        </v-row>
+      </v-col>
+    </v-row>
+    <div class="ml-1">
+      <div>Rotate Camera: Click and Drag</div>
+      <div>Move Camera: Press Ctrl + Click and Drag</div>
+      <div>Zoom In/Out: Scroll</div>
+    </div>
+  </div>
 </template>
 
 <script>
@@ -18,6 +69,9 @@ export default {
   },
   data() {
     return {
+      DISTANCE_SCALE_FACTOR: 20,
+      framesPerSecond: 30,
+      playSpeed: 1,
       groups: new Map(),
       renderer: null,
       scene: null,
@@ -25,25 +79,28 @@ export default {
       controls: null,
       mixers: new Map(),
       animTime: 0,
-      framesPerSecond: 30,
       axis10cm: null,
       axis1m: null,
       start: true,
       play: true
     };
   },
-  computed: {
-    angleSpeedRadius() {
-      return Math.PI / 2 / this.framesPerSecond;
-    },
-    angleSpeedDegree() {
-      return 90 / this.framesPerSecond;
-    },
-    speed() {
-      return 4 / 3 / 2.5;
-    }
-  },
   methods: {
+    moveX: function (group, meter) {
+      group.translateX(-meter * this.DISTANCE_SCALE_FACTOR);
+    },
+    moveY: function (group, meter) {
+      group.translateZ(meter * this.DISTANCE_SCALE_FACTOR);
+    },
+    moveZ: function (group, meter) {
+      group.translateY(meter * this.DISTANCE_SCALE_FACTOR);
+    },
+    rotate: function (group, degree) {
+      group.rotation.y -= (degree / 180 * Math.PI);
+    },
+    reloadPage() {
+      window.location.reload();
+    },
     init: function () {
       let container = document.getElementById("container");
       this.camera = new THREE.PerspectiveCamera(70, 8 / 6, 1, 1000);
@@ -115,9 +172,9 @@ export default {
           obj.scene.children[0].children[0].children[0].children.pop(12);
           obj.scene.position.y += 1.5;
           this.groups.get(name).add(obj.scene);
-          this.groups.get(name).translateX(-init_pos[0]);//TODO: scale
-          this.groups.get(name).translateZ(init_pos[1]);//TODO: scale
-          this.groups.get(name).translateY(init_pos[2]);//TODO: scale
+          this.moveX(this.groups.get(name), init_pos[0]);
+          this.moveY(this.groups.get(name), init_pos[1]);
+          this.moveZ(this.groups.get(name), init_pos[2]);
           this.scene.add(this.groups.get(name));
           this.mixers.set(name, new THREE.AnimationMixer(this.groups.get(name)));
           obj.animations.forEach(clip => {
@@ -143,7 +200,7 @@ export default {
       // Controls
       this.controls = new OrbitControls(this.camera, this.renderer.domElement);
       this.camera.position.x = 10;
-      this.camera.position.y = 24;
+      this.camera.position.y = 40;
       this.camera.position.z = 40;
       this.controls.maxPolarAngle = Math.PI / 2;
       this.controls.autoRotate = true;
@@ -194,6 +251,15 @@ export default {
         sequential.shift();
       }
     },
+    getSpeed: function (name) {
+      return this.config.find(c => c.name == name).speed;
+    },
+    getRotateSpeed: function (name) {
+      return this.config.find(c => c.name == name).rotate_speed;
+    },
+    getTakeoffHeight: function (name) {
+      return this.config.find(c => c.name == name).takeoff_height;
+    },
     move: function (sequential) {
       if (sequential.length == 0) {
         if (this.commands.length == 0) {
@@ -208,46 +274,46 @@ export default {
         switch (currCommand.action) {
           case "takeoff":
             currCommand.action = "up";
-            currCommand.values = [this.config.find(c => c.name == name).takeoff_height];
+            currCommand.values = [this.getTakeoffHeight(name)];
             break;
           case "land":
             currCommand.action = "down";
-            currCommand.values = [group.position.y / 3.2]; //TODO: what magic number is this????
+            currCommand.values = [group.position.y / this.DISTANCE_SCALE_FACTOR];
             break;
           case "forward":
-            group.translateZ(this.speed);//todo change speed
-            this.updateSequential(sequential, 2 / this.framesPerSecond);
+            this.moveY(group, this.getSpeed(name) / this.framesPerSecond * this.playSpeed);
+            this.updateSequential(sequential, this.getSpeed(name) / this.framesPerSecond * this.playSpeed);
             break;
           case "backward":
-            group.translateZ(-this.speed);
-            this.updateSequential(sequential, 2 / this.framesPerSecond);
+            this.moveY(group, -this.getSpeed(name) / this.framesPerSecond * this.playSpeed);
+            this.updateSequential(sequential, this.getSpeed(name) / this.framesPerSecond * this.playSpeed);
             break;
           case "right":
-            group.translateX(-this.speed);
-            this.updateSequential(sequential, 2 / this.framesPerSecond);
+            this.moveX(group, this.getSpeed(name) / this.framesPerSecond * this.playSpeed);
+            this.updateSequential(sequential, this.getSpeed(name) / this.framesPerSecond * this.playSpeed);
             break;
           case "left":
-            group.translateX(this.speed);
-            this.updateSequential(sequential, 2 / this.framesPerSecond);
+            this.moveX(group, -this.getSpeed(name) / this.framesPerSecond * this.playSpeed);
+            this.updateSequential(sequential, this.getSpeed(name) / this.framesPerSecond * this.playSpeed);
             break;
           case "up":
-            group.translateY(this.speed);
-            this.updateSequential(sequential, 5 / this.framesPerSecond);
+            this.moveZ(group, this.getSpeed(name) / this.framesPerSecond * this.playSpeed);
+            this.updateSequential(sequential, this.getSpeed(name) / this.framesPerSecond * this.playSpeed);
             break;
           case "down":
-            group.translateY(-this.speed);
-            this.updateSequential(sequential, 5 / this.framesPerSecond);
+            this.moveZ(group, -this.getSpeed(name) / this.framesPerSecond * this.playSpeed);
+            this.updateSequential(sequential, this.getSpeed(name) / this.framesPerSecond * this.playSpeed);
             break;
           case "rotate_right":
-            group.rotation.y -= this.angleSpeedRadius;
-            this.updateSequential(sequential, this.angleSpeedDegree);
+            this.rotate(group, this.getRotateSpeed(name) / this.framesPerSecond * this.playSpeed);
+            this.updateSequential(sequential, this.getRotateSpeed(name) / this.framesPerSecond * this.playSpeed);
             break;
           case "rotate_left":
-            group.rotation.y += this.angleSpeedRadius;
-            this.updateSequential(sequential, this.angleSpeedDegree);
+            this.rotate(group, -this.getRotateSpeed(name) / this.framesPerSecond * this.playSpeed);
+            this.updateSequential(sequential, this.getRotateSpeed(name) / this.framesPerSecond * this.playSpeed);
             break;
           case "wait":
-            this.updateSequential(sequential, 1 / this.framesPerSecond);
+            this.updateSequential(sequential, 1 / this.framesPerSecond * this.playSpeed);
             break;
         }
 

@@ -1,18 +1,15 @@
 <template>
-  <div id="app">
+  <v-app>
     <div v-if="ready">
       <div v-if="error" id="error_msg">An error was met when parsing the commands,
         please check whether the url is correct.
       </div>
       <Simulator v-if="!error" :commands="commands" :config="config"/>
-      <div v-if="!error">Rotate Camera: Click and Drag</div>
-      <div v-if="!error">Move Camera: Press Ctrl + Click and Drag</div>
-      <div v-if="!error">Zoom in/out: Scroll</div>
     </div>
     <div v-else>
       Loading...
     </div>
-  </div>
+  </v-app>
 </template>
 
 <script>
