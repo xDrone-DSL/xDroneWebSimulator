@@ -3,7 +3,7 @@
     <div id="container"></div>
     <v-row style="width: 800px">
       <v-col :cols="3">
-        <v-btn class="ma-2 pa-2" @click="reloadPage">Replay</v-btn>
+        <v-btn class="ma-2 pa-2" @click="init()">Replay</v-btn>
       </v-col>
       <v-col>
         <v-row dense>
@@ -31,7 +31,10 @@
                   mdi-help-box
                 </v-icon>
               </template>
-              <div>A higher FPS improves the accuracy, but causes a heavier burden on you browser</div>
+              <div>
+                A higher FPS improves the accuracy, but causes a heavier burden on you browser,
+                and may slow down the animation
+              </div>
             </v-tooltip>
             :
           </v-col>
@@ -40,6 +43,8 @@
               <v-radio label="30fps" :value="30"></v-radio>
               <v-radio label="60fps" :value="60"></v-radio>
               <v-radio label="90fps" :value="90"></v-radio>
+              <v-radio label="120fps" :value="120"></v-radio>
+              <v-radio label="150fps" :value="150"></v-radio>
             </v-radio-group>
           </v-col>
         </v-row>
@@ -72,6 +77,7 @@ export default {
       DISTANCE_SCALE_FACTOR: 20,
       framesPerSecond: 30,
       playSpeed: 1,
+      commandsCopy: JSON.parse(JSON.stringify(this.commands)),
       groups: new Map(),
       renderer: null,
       scene: null,
@@ -98,11 +104,23 @@ export default {
     rotate: function (group, degree) {
       group.rotation.y -= (degree / 180 * Math.PI);
     },
-    reloadPage() {
-      window.location.reload();
-    },
     init: function () {
+      this.commandsCopy = JSON.parse(JSON.stringify(this.commands));
+      this.groups = new Map();
+      this.renderer = null;
+      this.scene = null;
+      this.camera = null;
+      this.controls = null;
+      this.mixers = new Map();
+      this.animTime = 0;
+      this.axis10cm = null;
+      this.axis1m = null;
+      this.start = true;
+      this.play = true;
+
       let container = document.getElementById("container");
+      container.innerHTML = '';
+
       this.camera = new THREE.PerspectiveCamera(70, 8 / 6, 1, 1000);
 
       this.scene = new THREE.Scene();
@@ -239,7 +257,7 @@ export default {
           this.start = false;
         }
       } else {
-        this.move(this.commands);
+        this.move(this.commandsCopy);
       }
       this.controls.update();
 
@@ -261,8 +279,9 @@ export default {
       return this.config.find(c => c.name == name).takeoff_height;
     },
     move: function (sequential) {
+      console.log(this.commandsCopy)
       if (sequential.length == 0) {
-        if (this.commands.length == 0) {
+        if (this.commandsCopy.length == 0) {
           this.play = false;
         }
         return;
