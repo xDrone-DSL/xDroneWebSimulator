@@ -75,7 +75,7 @@ export default {
   data() {
     return {
       DISTANCE_SCALE_FACTOR: 20,
-      framesPerSecond: 30,
+      framesPerSecond: 90,
       playSpeed: 1,
       commandsCopy: JSON.parse(JSON.stringify(this.commands)),
       groups: new Map(),
