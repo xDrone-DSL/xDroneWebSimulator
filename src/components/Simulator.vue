@@ -1,6 +1,7 @@
 <template>
   <div>
     <div id="container"></div>
+    <div class="ml-1">Time used in animation: {{seconds.toFixed(2)}}s</div>
     <v-row style="width: 800px">
       <v-col :cols="3">
         <v-btn class="ma-2 pa-2" @click="init()">Replay</v-btn>
@@ -78,6 +79,7 @@ export default {
       framesPerSecond: 90,
       playSpeed: 1,
       commandsCopy: JSON.parse(JSON.stringify(this.commands)),
+      seconds: 0.0,
       groups: new Map(),
       renderer: null,
       scene: null,
@@ -106,6 +108,7 @@ export default {
     },
     init: function () {
       this.commandsCopy = JSON.parse(JSON.stringify(this.commands));
+      this.seconds = 0.0;
       this.groups = new Map();
       this.renderer = null;
       this.scene = null;
@@ -258,6 +261,9 @@ export default {
         }
       } else {
         this.move(this.commandsCopy);
+        if (this.play) {
+          this.seconds += 1 * this.playSpeed / this.framesPerSecond;
+        }
       }
       this.controls.update();
 
