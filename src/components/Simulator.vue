@@ -271,7 +271,7 @@ export default {
     },
     updateSequential: function (sequential, stepSize) {
       sequential[0].values[0] -= stepSize;
-      if (sequential[0].values[0] <= 0) {
+      if (sequential[0].values[0] <= 1e-5) {
         sequential.shift();
       }
     },
@@ -285,7 +285,6 @@ export default {
       return this.config.find(c => c.name == name).takeoff_height;
     },
     move: function (sequential) {
-      console.log(this.commandsCopy)
       if (sequential.length == 0) {
         if (this.commandsCopy.length == 0) {
           this.play = false;
